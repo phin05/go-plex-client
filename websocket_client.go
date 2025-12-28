@@ -211,29 +211,25 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 			_, message, err := c.ReadMessage()
 
 			if err != nil {
-				fmt.Println("read:", err)
-				fn(err)
+				fn(fmt.Errorf("read: %w", err))
 				return
 			}
-
-			// fmt.Printf("\t%s\n", string(message))
 
 			var notif WebsocketNotification
 
 			if err := json.Unmarshal(message, &notif); err != nil {
-				fmt.Printf("convert message to json failed: %v\n", err)
+				fn(fmt.Errorf("convert message to json failed: %w", err))
 				continue
 			}
 
-			// fmt.Println(notif.Type)
-			fn, ok := events.events[notif.Type]
+			handler, ok := events.events[notif.Type]
 
 			if !ok {
-				fmt.Printf("unknown websocket event name: %v\n", notif.Type)
+				fn(fmt.Errorf("unknown websocket event name: %s", notif.Type))
 				continue
 			}
 
-			fn(notif.NotificationContainer)
+			handler(notif.NotificationContainer)
 		}
 	}()
 
@@ -250,20 +246,17 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 					fn(err)
 				}
 			case <-interrupt:
-				fmt.Println("interrupt")
 				// To cleanly close a connection, a client should send a close
 				// frame and wait for the server to close the connection.
 				err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 				if err != nil {
-					fmt.Println("write close:", err)
-					fn(err)
+					fn(fmt.Errorf("write close: %w", err))
 				}
 
 				select {
 				case <-done:
 				case <-time.After(time.Second):
-					fmt.Println("closing websocket...")
 					c.Close()
 				}
 				return
