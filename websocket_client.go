@@ -174,11 +174,11 @@ func (e *NotificationEvents) OnTranscodeUpdate(fn func(n NotificationContainer))
 }
 
 // SubscribeToNotifications connects to your server via websockets listening for events
-func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-chan os.Signal, fn func(error)) {
+func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-chan os.Signal, onError func(error)) {
 	plexURL, err := url.Parse(p.URL)
 
 	if err != nil {
-		fn(err)
+		onError(fmt.Errorf("parse url: %w", err))
 		return
 	}
 
@@ -197,7 +197,7 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 	c, _, err := websocket.DefaultDialer.Dial(websocketURL.String(), headers)
 
 	if err != nil {
-		fn(err)
+		onError(fmt.Errorf("connect websocket: %w", err))
 		return
 	}
 
@@ -211,29 +211,25 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 			_, message, err := c.ReadMessage()
 
 			if err != nil {
-				fmt.Println("read:", err)
-				fn(err)
+				onError(fmt.Errorf("read: %w", err))
 				return
 			}
-
-			// fmt.Printf("\t%s\n", string(message))
 
 			var notif WebsocketNotification
 
 			if err := json.Unmarshal(message, &notif); err != nil {
-				fmt.Printf("convert message to json failed: %v\n", err)
+				onError(fmt.Errorf("unmarshal: %w", err))
 				continue
 			}
 
-			// fmt.Println(notif.Type)
-			fn, ok := events.events[notif.Type]
+			eventHandler, ok := events.events[notif.Type]
 
 			if !ok {
-				fmt.Printf("unknown websocket event name: %v\n", notif.Type)
+				onError(fmt.Errorf("unknown websocket event name: %s", notif.Type))
 				continue
 			}
 
-			fn(notif.NotificationContainer)
+			eventHandler(notif.NotificationContainer)
 		}
 	}()
 
@@ -247,23 +243,20 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 				err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
 
 				if err != nil {
-					fn(err)
+					onError(fmt.Errorf("write: %w", err))
 				}
 			case <-interrupt:
-				fmt.Println("interrupt")
 				// To cleanly close a connection, a client should send a close
 				// frame and wait for the server to close the connection.
 				err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 				if err != nil {
-					fmt.Println("write close:", err)
-					fn(err)
+					onError(fmt.Errorf("write close: %w", err))
 				}
 
 				select {
 				case <-done:
 				case <-time.After(time.Second):
-					fmt.Println("closing websocket...")
 					c.Close()
 				}
 				return
