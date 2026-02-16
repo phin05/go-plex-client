@@ -559,6 +559,10 @@ type BaseAPIResponse struct {
 	} `json:"MediaContainer"`
 }
 
+type MyAccountResponse struct {
+	User UserPlexTV `json:"user"`
+}
+
 // UserPlexTV plex.tv user. should be used when interacting with plex.tv as the id is an int
 type UserPlexTV struct {
 	// ID is an int when signing in to Plex.tv but a string when access own server
