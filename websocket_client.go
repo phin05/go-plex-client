@@ -211,7 +211,9 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 			_, message, err := c.ReadMessage()
 
 			if err != nil {
-				onError(fmt.Errorf("read: %w", err))
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					onError(fmt.Errorf("read: %w", err))
+				}
 				return
 			}
 
@@ -225,7 +227,7 @@ func (p *Plex) SubscribeToNotifications(events *NotificationEvents, interrupt <-
 			eventHandler, ok := events.events[notif.Type]
 
 			if !ok {
-				onError(fmt.Errorf("unknown websocket event name: %s", notif.Type))
+				// onError(fmt.Errorf("unknown websocket event name: %s", notif.Type))
 				continue
 			}
 
